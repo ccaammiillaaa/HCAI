@@ -3,6 +3,7 @@ name = "hcai"
 version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
+    "flask>=3.1.2",
     "matplotlib>=3.10.6",
     "numpy>=2.3.3",
     "scikit-learn>=1.7.2",
