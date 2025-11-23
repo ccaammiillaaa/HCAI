@@ -5,40 +5,63 @@ using UnityEngine;
 
 public class ServerScript : MonoBehaviour
 {
+    TcpClient client;
+    NetworkStream stream;
+
     void Start()
     {
-        // ping test
-        PingPythonServer();
+        ConnectToPython();
     }
 
-    void PingPythonServer()
+    void OnApplicationQuit()
+    {
+        stream?.Close();
+        client?.Close();
+    }
+
+    void ConnectToPython()
     {
         try
         {
-            //connect to the Python server
-            using (TcpClient client = new TcpClient("127.0.0.1", 5000))
-            {
-                NetworkStream stream = client.GetStream();
-
-                //send simple ping message
-                string message = "Hello from Unity!";
-                byte[] data = Encoding.UTF8.GetBytes(message);
-                stream.Write(data, 0, data.Length);
-                Debug.Log("Sent to Python server: " + message);
-
-                //wait for response
-                byte[] buffer = new byte[1024];
-                int bytes = stream.Read(buffer, 0, buffer.Length);
-                string response = Encoding.UTF8.GetString(buffer, 0, bytes);
-
-                Debug.Log("Received from Python server: " + response);
-
-                stream.Close();
-            }
+            client = new TcpClient("127.0.0.1", 65432);
+            stream = client.GetStream();
+            Debug.Log("🟢 Connected to Python server!");
         }
         catch (Exception e)
         {
-            Debug.LogError("Error communicating with Python server: " + e.Message);
+            Debug.LogError("❌ Could not connect to Python: " + e.Message);
         }
-    }    
+    }
+
+    public void SendUserInput(string text)
+    {
+        if (client == null || !client.Connected)
+        {
+            Debug.LogWarning("⚠️ Not connected to Python.");
+            return;
+        }
+
+        byte[] data = Encoding.UTF8.GetBytes(text);
+        stream.Write(data, 0, data.Length);
+
+        // Receive response
+        byte[] buffer = new byte[1024];
+        int length = stream.Read(buffer, 0, buffer.Length);
+        string response = Encoding.UTF8.GetString(buffer, 0, length);
+
+        Debug.Log("📥 Python responded: " + response);
+
+        // Split into gameplay + text parts
+        string[] parts = response.Split('|');
+
+        string command = parts[0];
+        string santaText = parts.Length > 1 ? parts[1] : "";
+
+        // For now, just log it
+        Debug.Log("🎮 Command: " + command);
+        Debug.Log("🎅 Santa says: " + santaText);
+
+        // TODO: later -> call prefab spawn code
+        // TODO: later -> update UI TextMeshPro
+    }
 }
