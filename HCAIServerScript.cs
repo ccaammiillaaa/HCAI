@@ -1,29 +1,27 @@
 using System;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading;
 using UnityEngine;
 
-public class ServerScript : MonoBehaviour
+public class HCAIServerScript : MonoBehaviour
 {
-    TcpClient client;
-    NetworkStream stream;
+    private TcpClient client;
+    private NetworkStream stream;
 
+    public string host = "127.0.0.1";
+    public int port = 25001;
+    
     void Start()
     {
         ConnectToPython();
-    }
-
-    void OnApplicationQuit()
-    {
-        stream?.Close();
-        client?.Close();
     }
 
     void ConnectToPython()
     {
         try
         {
-            client = new TcpClient("127.0.0.1", 65432);
+            client = new TcpClient(host, port);
             stream = client.GetStream();
             Debug.Log("🟢 Connected to Python server!");
         }
@@ -31,6 +29,12 @@ public class ServerScript : MonoBehaviour
         {
             Debug.LogError("❌ Could not connect to Python: " + e.Message);
         }
+    }
+
+    void OnApplicationQuit()
+    {
+        stream?.Close();
+        client?.Close();
     }
 
     public void SendUserInput(string text)
@@ -41,19 +45,18 @@ public class ServerScript : MonoBehaviour
             return;
         }
 
-        byte[] data = Encoding.UTF8.GetBytes(text);
+        byte[] data = Encoding.UTF8.GetBytes(text + "\n");
         stream.Write(data, 0, data.Length);
 
         // Receive response
         byte[] buffer = new byte[1024];
         int length = stream.Read(buffer, 0, buffer.Length);
-        string response = Encoding.UTF8.GetString(buffer, 0, length);
 
+        string response = Encoding.UTF8.GetString(buffer, 0, length);
         Debug.Log("📥 Python responded: " + response);
 
         // Split into gameplay + text parts
         string[] parts = response.Split('|');
-
         string command = parts[0];
         string santaText = parts.Length > 1 ? parts[1] : "";
 
