@@ -1,5 +1,7 @@
 import whisper
 import wave
+import numpy as np
+import scipy.signal as signal
 from dataclasses import dataclass, asdict
 from record_and_ASR_test import StreamParams, Recorder
 import pyaudio
@@ -14,7 +16,7 @@ import time
 stop_server_thread = False
 
 # the LLM
-model = OllamaLLM(model="llama3.2")
+model = OllamaLLM(model="llama3.1")
 
 prompt = ChatPromptTemplate.from_messages([
     ("system",
@@ -41,112 +43,137 @@ def classify_text(text: str) -> str:
     output = chain.invoke({"input": text})
     return output.strip()
 
-def send_dummy_messages_to_unity():
-    """Send test messages to Unity without audio recording"""
-    HOST, PORT = "127.0.0.1", 25001
-    
-    test_messages = [
-        "Train",
-        "Teddy Bear", 
-        "Robot",
-        "Could not understand",
-        "Train",
-        "Robot"
-    ]
-    
-    try:
-        print(f"Connecting to Unity at {HOST}:{PORT}...")
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect((HOST, PORT))
-        print("✅ Connected to Unity!\n")
-        
-        # Send initial connection message
-        s.sendall(b"Python dummy test client")
-        time.sleep(1)
+#def send_dummy_messages_to_unity():
+#    """Send test messages to Unity without audio recording"""
+#    HOST, PORT = "127.0.0.1", 25001
+#    
+#    test_messages = [
+#        "Train",
+#        "Teddy Bear", 
+#        "Robot",
+#        "Could not understand",
+#        "Train",
+#        "Robot"
+#    ]
+#    
+#    try:
+#        print(f"Connecting to Unity at {HOST}:{PORT}...")
+#        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+#        s.connect((HOST, PORT))
+#        print("✅ Connected to Unity\n")
+#        
+#        # Send initial connection message
+#          s.sendall(b"Python dummy test client")
+#        time.sleep(1)
         
         # Send test messages
-        for i, message in enumerate(test_messages, 1):
-            print(f"Sending {i}/{len(test_messages)}: '{message}'")
-            s.sendall(message.encode("utf-8"))
-            time.sleep(2)  # Wait 2 seconds between messages
+#        for i, message in enumerate(test_messages, 1):
+#           print(f"Sending {i}/{len(test_messages)}: '{message}'")
+    #         s.sendall(message.encode("utf-8"))
+    #         time.sleep(2)  # Wait 2 seconds between messages
         
-        print("\n✅ All dummy messages sent!")
+    #     print("\n✅ All dummy messages sent!")
         
-        # Send stop signal
-        time.sleep(1)
-        s.sendall(b"stop")
-        s.close()
-        print("Connection closed.")
+    #     # Send stop signal
+    #     time.sleep(1)
+    #     s.sendall(b"stop")
+    #     s.close()
+    #     print("Connection closed.")
         
-    except Exception as e:
-        print(f"❌ Error: {e}")
+    # except Exception as e:
+    #     print(f"❌ Error: {e}")
+
+# # Only run socket code if this file is run directly
+# if __name__ == "__main__":
+#     import sys
+    
+#     # Check command line argument
+#     if len(sys.argv) > 1 and sys.argv[1] == "--test":
+#         print("=== Running Dummy Message Test ===\n")
+#         send_dummy_messages_to_unity()
+#     else:
+#         # Normal operation with audio recording
+#         HOST, PORT = "127.0.0.1", 25001
+#         data = "LLM classifier connected"
 
 # Only run socket code if this file is run directly
 if __name__ == "__main__":
-    import sys
-    
-    # Check command line argument
-    if len(sys.argv) > 1 and sys.argv[1] == "--test":
-        print("=== Running Dummy Message Test ===\n")
-        send_dummy_messages_to_unity()
-    else:
-        # Normal operation with audio recording
-        HOST, PORT = "127.0.0.1", 25001
-        data = "LLM classifier connected"
+    # Normal operation with audio recording
+    HOST, PORT = "127.0.0.1", 25001
+    data = "LLM classifier connected"
+       
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        s.connect((HOST, PORT))
+        s.sendall(data.encode("utf-8"))
+        print("Connected to Unity server")
+    except:
+        print("A socket exception occurred") 
 
-        try:
-            s.connect((HOST, PORT))
-            s.sendall(data.encode("utf-8"))
-            print("Connected to Unity server")
-        except:
-            print("A socket exception occurred") 
-
-        def listen_to_server_loop_func():
-            global stop_server_thread
-            while not stop_server_thread:
-                try:
-                    data = s.recv(1024)
-                    if not data:
-                        break
-                    stringdata = data.decode('utf-8')
-                    handleServerMessage(stringdata)
-                except Exception as e:
-                    print(f"Error receiving data: {e}")
+    def listen_to_server_loop_func():
+        global stop_server_thread
+        while not stop_server_thread:
+            try:
+                data = s.recv(1024)
+                if not data:
                     break
+                stringdata = data.decode('utf-8')
+                handleServerMessage(stringdata)
+            except Exception as e:
+                print(f"Error receiving data: {e}")
+                break
             
-        listen_thread = threading.Thread(target=listen_to_server_loop_func)
-        listen_thread.start()
+    listen_thread = threading.Thread(target=listen_to_server_loop_func)
+    listen_thread.start()
 
-        # Load Whisper model
-        speech_model = whisper.load_model("tiny.en")
+    # Load Whisper model
+    speech_model = whisper.load_model("tiny.en")
 
-        #Server message handler
-        def handleServerMessage(stringdata):
-            global stop_server_thread
+    #Server message handler
+    def handleServerMessage(stringdata):
+        global stop_server_thread
 
-            if stringdata == "stop":
-                s.close()
-                stop_server_thread = True
+        if stringdata == "stop":
+            s.close()
+            stop_server_thread = True
 
-            elif stringdata == "speechstart":
-                stream_params = StreamParams()
-                recorder = Recorder(stream_params)
-                recorder.record(5, "audio.wav")
+        elif stringdata == "speechstart":
+            print("🎤 Starting recording...")
+            stream_params = StreamParams()
+            recorder = Recorder(stream_params)
+            recorder.record(5, "audio.wav")
+            print("✅ Recording complete")
 
-            elif stringdata == "speechstop":
-                transcript = speech_model.transcribe(audio="audio.wav")
-                text = transcript["text"]
-                print("TRANSCRIPT:", text)
+        elif stringdata == "speechstop":
+            print("📝 Transcribing audio...")
+                
+            # Load and resample audio (like in test_audio_classification.py)
+            with wave.open("audio.wav", "rb") as wav_file:
+                sample_rate = wav_file.getframerate()
+                frames = wav_file.readframes(wav_file.getnframes())
+                audio_data = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
+                    
+                # Convert stereo to mono
+                if wav_file.getnchannels() == 2:
+                    audio_data = audio_data.reshape(-1, 2).mean(axis=1)
+                
+            # Resample to 16kHz for Whisper
+            if sample_rate != 16000:
+                num_samples = int(len(audio_data) * 16000 / sample_rate)
+                audio_data = signal.resample(audio_data, num_samples)
+                
+            transcript = speech_model.transcribe(audio=audio_data)
+            text = transcript["text"]
+            print("TRANSCRIPT:", text)
 
-                category = classify_text(text)
-                print("CATEGORY:", category)
+            category = classify_text(text)
+            print("CATEGORY:", category)
 
-                s.send(category.encode("utf-8"))
+            s.send(category.encode("utf-8"))
 
-            else:
-                print("Received:", stringdata)
+        else:
+            print("Received:", stringdata)
 
 
 

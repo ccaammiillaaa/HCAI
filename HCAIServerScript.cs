@@ -29,33 +29,8 @@ public class HCAIServerScript : MonoBehaviour //defines Unity scrpipt class, inh
         ObjectManager.Instance.ShowObject(0);
         
         // Wait one frame to ensure ObjectManager.Awake() has run
-        StartCoroutine(DelayedStart());
+        //StartCoroutine(DelayedStart());
     }
-
-    IEnumerator DelayedStart()
-    {
-        yield return null; // Wait one frame
-        StartCoroutine(TestObjectLoop());
-    }
-
-    IEnumerator TestObjectLoop()
-    {
-        Debug.Log("Starting test loop...");
-
-        for (int i = 0; i < 10; i++)
-        {
-            int fakeMessage = (i % 3) + 1;  // 1,2,3 repeating
-
-            Debug.Log("TEST: Simulating LLM answer: " + fakeMessage);
-
-            ObjectManager.Instance.ShowObject(fakeMessage);
-
-            yield return new WaitForSeconds(1f);
-        }
-
-        Debug.Log("Test loop complete!");
-    }
-
 
     private void Update() //Unity calls every frame, here it is empty - should this be changed?
     {
@@ -69,6 +44,23 @@ public class HCAIServerScript : MonoBehaviour //defines Unity scrpipt class, inh
                 Debug.Log("Showing object ID: " + objectId);
             }
         }
+    }
+
+    // ADD THESE TWO METHODS HERE - for recording button
+    public void OnRecordButtonPressed()
+    {
+        SendMessageToClient("speechstart");
+        Debug.Log("🎤 Recording started...");
+        
+        // Wait 5 seconds, then tell Python to stop and transcribe
+        StartCoroutine(StopRecordingAfterDelay(5f));
+    }
+
+    private IEnumerator StopRecordingAfterDelay(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        SendMessageToClient("speechstop");
+        Debug.Log("⏹️ Recording stopped, waiting for classification...");
     }
 
     private void SetupServer() //method that contains server logic, it will run on the thread created earlier
@@ -130,12 +122,25 @@ public class HCAIServerScript : MonoBehaviour //defines Unity scrpipt class, inh
 
     private void OnApplicationQuit()
     {
-        SendMessageToClient("stop");
-        stream.Close();
-        client.Close();
-        server.Stop();
-        Thread.Abort();
-        Debug.Log("onApplicationQuit executed");
+        try
+        {
+            if (stream != null && client != null && client.Connected)
+            {
+                SendMessageToClient("stop");
+            }
+        }
+        catch (Exception e)
+        {
+            Debug.Log("Error during quit: " + e.Message);
+        }
+        finally
+        {
+            stream?.Close();
+            client?.Close();
+            server?.Stop();
+            Thread?.Abort();
+            Debug.Log("onApplicationQuit executed");
+        }
     }
 
     // Add this new method
@@ -227,3 +232,28 @@ public class HCAIServerScript : MonoBehaviour //defines Unity scrpipt class, inh
 //         // TODO: later -> update UI TextMeshPro
 //     }
 // }
+
+//dummy test
+//IEnumerator DelayedStart()
+//    {
+//        yield return null; // Wait one frame
+//        StartCoroutine(TestObjectLoop());
+//    }
+
+//    IEnumerator TestObjectLoop()
+//    {
+//        Debug.Log("Starting test loop...");
+//
+//        for (int i = 0; i < 10; i++)
+//        {
+  //          int fakeMessage = (i % 3) + 1;  // 1,2,3 repeating
+//
+  //          Debug.Log("TEST: Simulating LLM answer: " + fakeMessage);
+//
+  //          ObjectManager.Instance.ShowObject(fakeMessage);
+//
+  //          yield return new WaitForSeconds(1f);
+    //    }
+//
+  //      Debug.Log("Test loop complete!");
+    //}
